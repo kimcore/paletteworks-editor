@@ -1,6 +1,6 @@
 // Types
 import type PIXI from 'pixi.js' 
-import type { Slide, SlideNote, SlideStart, SlideStep } from '$lib/score/beatmap'
+import type { Slide, SlideEnd, SlideNote, SlideStart, SlideStep } from '$lib/score/beatmap'
 import type { Mode } from '$lib/editing'
 
 // Consts
@@ -104,36 +104,107 @@ const SHRINK_WIDTH = LANE_WIDTH / 8
 
 export function drawSlidePath(graphics: PIXI.Graphics, slideNotes: SlideNote[], critical: boolean, measureHeight: number) {
   graphics.clear()
-  slideNotes
-  .reduce((acc: [SlideNote, SlideNote][], ele: SlideNote, ind: number, arr: SlideNote[]) => {
+
+  const pairs = slideNotes
+    .reduce((acc: [SlideStart | SlideStep, SlideStep | SlideEnd][], ele: SlideNote, ind: number, arr: SlideNote[]) => {
       if (ind < arr.length - 1) {
-        acc.push([arr[ind], arr[ind + 1]])
+        acc.push([arr[ind] as SlideStart | SlideStep, arr[ind + 1] as SlideStep | SlideEnd])
       }
       return acc
-    }, [] as [SlideNote, SlideNote][])
-    .forEach(([origin, target]) => {
-      const easeInRatio = 'easeType' in origin && origin.easeType === 'easeIn' ? EASE_RATIOS.curved : EASE_RATIOS.straight
-      const easeOutRatio = 'easeType' in origin && origin.easeType === 'easeOut' ? EASE_RATIOS.curved : EASE_RATIOS.straight
+    }, [])
+  console.log({pairs})
 
-      const origin_x_left = calcX(origin.lane) + SHRINK_WIDTH
-      const origin_x_right = calcX(origin.lane) + origin.width * LANE_WIDTH - SHRINK_WIDTH
-      const origin_y = calcY(origin.tick, measureHeight) 
-      
-      const target_x_left = calcX(target.lane) + SHRINK_WIDTH
-      const target_x_right = calcX(target.lane) + target.width * LANE_WIDTH - SHRINK_WIDTH
-      const target_y = calcY(target.tick, measureHeight)
+  // graphics.lineStyle(3, getRandomColor(), 1)
 
+  pairs
+    .forEach(([originNote, targetNote]) => {
+      const originX = calcMidX(originNote.lane, originNote.width)
+      const origin = {
+        x: {
+          left: originX - originNote.width * LANE_WIDTH / 2 + SHRINK_WIDTH,
+          mid: originX,
+          right: originX + originNote.width * LANE_WIDTH / 2 - SHRINK_WIDTH,
+        },
+        y: calcY(originNote.tick, measureHeight)
+      }
+      const targetX = calcMidX(targetNote.lane, targetNote.width)
+      const target = {
+        x: {
+          left: targetX - targetNote.width * LANE_WIDTH / 2 + SHRINK_WIDTH,
+          mid: targetX,
+          right: targetX + targetNote.width * LANE_WIDTH / 2 - SHRINK_WIDTH,
+        },
+        y: calcY(targetNote.tick, measureHeight)
+      }
+
+      console.log(origin, target)
       graphics.beginFill(critical ? COLORS.COLOR_SLIDE_PATH : COLORS.COLOR_SLIDE_PATH_CRITICAL, COLORS.ALPHA_SLIDE_PATH)
-      graphics.moveTo(origin_x_left, origin_y)
-      graphics.bezierCurveTo(origin_x_left, origin_y - (origin_y - target_y) * easeInRatio, target_x_left, target_y + (origin_y - target_y) * easeOutRatio, target_x_left, target_y)
-      // graphics.moveTo(target_x_left, target_y)
-      graphics.lineTo(target_x_right, target_y)
-      graphics.bezierCurveTo(target_x_right, target_y + (origin_y - target_y) * easeOutRatio, origin_x_right, origin_y - (origin_y - target_y) * easeInRatio, origin_x_right, origin_y)
-      graphics.closePath()
+
+      switch (originNote.easeType) {
+        case 'easeOut':
+          drawCurve(graphics, origin.x.left, origin.y, target.x.left, target.y, quadraticEaseIn)
+          graphics.lineTo(target.x.right, target.y)
+          drawCurve(graphics, target.x.right, target.y, origin.x.right, origin.y, quadraticEaseOut)
+          graphics.lineTo(origin.x.left, origin.y)
+          break
+        case 'easeIn':
+          drawCurve(graphics, origin.x.right, origin.y, target.x.right, target.y, quadraticEaseOut)
+          graphics.lineTo(target.x.left, target.y)
+          drawCurve(graphics, target.x.left, target.y, origin.x.left, origin.y, quadraticEaseIn)
+          graphics.lineTo(origin.x.right, origin.y)
+          break
+        default:
+          graphics.moveTo(origin.x.left, origin.y)
+          graphics.lineTo(origin.x.right, origin.y)
+          graphics.lineTo(target.x.right, target.y)
+          graphics.lineTo(target.x.left, target.y)
+          break
+      }
+      // graphics.closePath()
       graphics.endFill()
-      // graphics.lineTo(origin_x_right, origin_y)
-      // graphics.moveTo(origin_x_right, origin_y)
-    })    
+    })        
+}
+
+      
+function getRandomColor() {
+  var letters = '0123456789ABCDEF';
+  var color = '';
+  for (var i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return parseInt(color, 16);
+}
+
+function lerp(v0: number, v1: number, t: number) {
+  return (1 - t) * v0 + t * v1;
+}
+
+function quadraticEaseIn(t: number) {
+  return t * t
+}
+
+function quadraticEaseOut(t: number) {
+  return 1 - (1 - t) ** 2
+}
+
+function drawCurve(
+  graphics: PIXI.Graphics,
+  fromX: number, fromY: number,
+  toX: number, toY: number,
+  ease: (t: number) => number
+) {
+  graphics.moveTo(fromX, fromY)
+  for (let i = 0; i <= 1; i += 0.1) {
+    // console.log({
+    //   i,
+    //   fromX, fromY, toX, toY,
+    //   lerpX: lerp(fromX, toX, i), lerpY: lerp(fromY, toY, ease(i))
+    // })
+    graphics.lineTo(
+      lerp(fromX, toX, i),
+      lerp(fromY, toY, ease(i))
+    )
+  }
 }
 
 export function drawBPMs(graphics: PIXI.Graphics, pixi, bpms: Map<number, number>, measureHeight: number) {

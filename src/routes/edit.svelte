@@ -9,7 +9,7 @@
     // const url = `/Shoushitsu_MASTER.sus`;
     const url = `/DoctorFunkBeat_MASTER.sus`;
     // const url = `/DoctorDiamond.sus`
-    // const url = `/SlideEase.sus`;
+    // const url = `/SlideEase2.sus`;
     // const url = `MultipleBPM.sus`;
     // const url = `SlideTest.sus`;
     // const url = '/InvisibleRelayPoint.sus'
